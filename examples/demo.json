@@ -1,0 +1,36 @@
+{
+  "items": [
+    {
+      "id": "demo-1",
+      "source": "演示资料 · 非新闻",
+      "title": "[演示] 关注公司的新产品公告",
+      "url": "https://example.com/tide-demo/product",
+      "published": "2026-01-02T09:00:00+00:00",
+      "summary": "这是一条虚构样例，用于展示来源与报告排版。",
+      "symbols": [
+        "NVDA"
+      ]
+    },
+    {
+      "id": "demo-2",
+      "source": "演示资料 · 非新闻",
+      "title": "[演示] 公司季度报告待复核",
+      "url": "https://example.com/tide-demo/filing",
+      "published": "2026-01-02T08:00:00+00:00",
+      "summary": "示例：打开原文检查数据，不根据标题生成买卖结论。",
+      "symbols": [
+        "MSFT"
+      ]
+    }
+  ],
+  "quotes": [
+    {
+      "symbol": "DEMO",
+      "price": 100,
+      "currency": "USD",
+      "change_pct": 1.25,
+      "quote_time": "2026-01-02T09:00:00+00:00",
+      "stale": true
+    }
+  ]
+}

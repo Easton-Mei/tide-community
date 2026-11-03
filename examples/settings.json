@@ -1,0 +1,16 @@
+{
+  "quotes": true,
+  "agent_enabled": false,
+  "hermes_executable": "",
+  "model": {
+    "base_url": "https://api.deepseek.com/v1",
+    "name": "deepseek-chat"
+  },
+  "schedule": {
+    "enabled": false,
+    "time": "20:00",
+    "timezone": "local",
+    "ai": false,
+    "push": false
+  }
+}

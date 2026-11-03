@@ -1,0 +1,32 @@
+[
+  {
+    "id": "3da9ce18ac89",
+    "name": "NVIDIA Newsroom",
+    "url": "https://nvidianews.nvidia.com/rss.xml",
+    "symbols": [
+      "NVDA"
+    ],
+    "enabled": true,
+    "kind": "rss"
+  },
+  {
+    "id": "5ef67380b655",
+    "name": "Microsoft Official Blog",
+    "url": "https://blogs.microsoft.com/feed/",
+    "symbols": [
+      "MSFT"
+    ],
+    "enabled": true,
+    "kind": "rss"
+  },
+  {
+    "id": "61f74471c9bd",
+    "name": "Google Blog",
+    "url": "https://blog.google/rss/",
+    "symbols": [
+      "GOOGL"
+    ],
+    "enabled": true,
+    "kind": "rss"
+  }
+]

@@ -1,0 +1,112 @@
+{
+  "NVDA": {
+    "name": "NVIDIA · 英伟达",
+    "cik": "0001045810",
+    "feeds": [
+      {
+        "name": "NVIDIA Newsroom",
+        "url": "https://nvidianews.nvidia.com/rss.xml"
+      }
+    ]
+  },
+  "MSFT": {
+    "name": "Microsoft · 微软",
+    "cik": "0000789019",
+    "feeds": [
+      {
+        "name": "Microsoft Official Blog",
+        "url": "https://blogs.microsoft.com/feed/"
+      }
+    ]
+  },
+  "GOOGL": {
+    "name": "Alphabet · 谷歌",
+    "cik": "0001652044",
+    "feeds": [
+      {
+        "name": "Google Blog",
+        "url": "https://blog.google/rss/"
+      }
+    ]
+  },
+  "AMZN": {
+    "name": "Amazon · 亚马逊",
+    "cik": "0001018724",
+    "feeds": [
+      {
+        "name": "AWS News Blog",
+        "url": "https://aws.amazon.com/blogs/aws/feed/"
+      }
+    ]
+  },
+  "AAPL": {
+    "name": "Apple · 苹果",
+    "cik": "0000320193",
+    "feeds": [
+      {
+        "name": "Apple Newsroom",
+        "url": "https://www.apple.com/newsroom/rss-feed.rss"
+      }
+    ]
+  },
+  "META": {
+    "name": "Meta Platforms",
+    "cik": "0001326801",
+    "feeds": [
+      {
+        "name": "Meta Newsroom",
+        "url": "https://about.fb.com/news/feed/"
+      }
+    ]
+  },
+  "TSLA": {
+    "name": "Tesla · 特斯拉",
+    "cik": "0001318605",
+    "feeds": []
+  },
+  "AMD": {
+    "name": "Advanced Micro Devices",
+    "cik": "0000002488",
+    "feeds": []
+  },
+  "MU": {
+    "name": "Micron · 美光",
+    "cik": "0000723125",
+    "feeds": []
+  },
+  "AVGO": {
+    "name": "Broadcom · 博通",
+    "cik": "0001730168",
+    "feeds": []
+  },
+  "ORCL": {
+    "name": "Oracle · 甲骨文",
+    "cik": "0001341439",
+    "feeds": []
+  },
+  "IBM": {
+    "name": "IBM",
+    "cik": "0000051143",
+    "feeds": [
+      {
+        "name": "IBM Newsroom",
+        "url": "https://newsroom.ibm.com/announcements?pagetemplate=rss"
+      }
+    ]
+  },
+  "COIN": {
+    "name": "Coinbase",
+    "cik": "0001679788",
+    "feeds": []
+  },
+  "PLTR": {
+    "name": "Palantir",
+    "cik": "0001321655",
+    "feeds": []
+  },
+  "BRK-B": {
+    "name": "Berkshire Hathaway · 伯克希尔 B 类",
+    "cik": "0001067983",
+    "feeds": []
+  }
+}

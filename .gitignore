@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+.tools/
+.env
+.env.*
+data/
+logs/
+reports/
+config/*.json
+!config/README.md
+dist/
+.playwright/
