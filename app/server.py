@@ -176,6 +176,10 @@ class Handler(BaseHTTPRequestHandler):
                 if not report:
                     return self.respond({"error": "报告不存在"}, 404)
                 return self.respond(report)
+            if path == "/guide/":
+                return self.respond((core.ROOT / "docs" / "开始阅读.html").read_bytes(), content_type="text/html; charset=utf-8")
+            if path == "/guide/guide.css":
+                return self.respond((core.ROOT / "docs" / "guide.css").read_bytes(), content_type="text/css; charset=utf-8")
             files = {"/": ("index.html", "text/html; charset=utf-8"),
                      "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                      "/style.css": ("style.css", "text/css; charset=utf-8")}
