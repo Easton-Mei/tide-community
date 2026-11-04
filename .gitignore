@@ -12,3 +12,4 @@ config/*.json
 !config/README.md
 dist/
 .playwright/
+.local-work/
