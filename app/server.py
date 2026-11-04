@@ -43,17 +43,26 @@ def local_time(schedule):
     return datetime.now(ZoneInfo(schedule["timezone"]))
 
 
+def schedule_times(cfg):
+    """Report times for one day, sorted. Older settings only have a single "time"."""
+    times = cfg.get("times") or [cfg.get("time", "20:00")]
+    return sorted(set(times))
+
+
 def next_run():
     cfg = core.config("settings")["schedule"]
     if not cfg["enabled"]:
         return None
     try:
         current = local_time(cfg)
-        hour, minute = map(int, cfg["time"].split(":"))
-        target = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        if target <= current:
-            target += timedelta(days=1)
-        return target.isoformat()
+        targets = []
+        for value in schedule_times(cfg):
+            hour, minute = map(int, value.split(":"))
+            target = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if target <= current:
+                target += timedelta(days=1)
+            targets.append(target)
+        return min(targets).isoformat()
     except Exception:
         return "时区不可用，请选择系统时区"
 
@@ -66,20 +75,32 @@ def scheduler():
             if not cfg["enabled"]:
                 continue
             current = local_time(cfg)
-            day = current.strftime("%Y-%m-%d")
+            day, clock = current.strftime("%Y-%m-%d"), current.strftime("%H:%M")
+            times = schedule_times(cfg)
             state = core.read_json(core.HOME / "data" / "schedule.json", {})
-            if current.strftime("%H:%M") < cfg["time"] or state.get("day") == day or TASK_LOCK.locked():
+            if state.get("day") != day:
+                done = []
+            elif "done" in state:
+                done = state["done"]
+            else:  # state written by an older version: today already handled up to now
+                done = [t for t in times if t <= clock]
+                core.write_json(core.HOME / "data" / "schedule.json", {**state, "done": done})
+            due = [t for t in times if t <= clock and t not in done]
+            if not due or TASK_LOCK.locked():
                 continue
-            def job(progress, day=day, cfg=cfg):
-                core.write_json(core.HOME / "data" / "schedule.json", {"day": day, "status": "running"})
+            # Started late? Run once for the latest missed time; never replay several reports.
+            slot, done = due[-1], sorted(set(done) | set(due))
+            def job(progress, day=day, cfg=cfg, slot=slot, done=done):
+                base = {"day": day, "slot": slot, "done": done}
+                core.write_json(core.HOME / "data" / "schedule.json", {**base, "status": "running"})
                 try:
                     report = core.generate(ai=cfg["ai"], progress=progress)
                     if cfg["push"]:
                         core.deliver(report)
-                    core.write_json(core.HOME / "data" / "schedule.json", {"day": day, "status": "done", "report_id": report["id"]})
+                    core.write_json(core.HOME / "data" / "schedule.json", {**base, "status": "done", "report_id": report["id"]})
                     return {"report_id": report["id"]}
                 except Exception as exc:
-                    core.write_json(core.HOME / "data" / "schedule.json", {"day": day, "status": "failed", "error": core.safe_error(exc)})
+                    core.write_json(core.HOME / "data" / "schedule.json", {**base, "status": "failed", "error": core.safe_error(exc)})
                     raise
             start_job("定时简报", job)
         except Exception as exc:
@@ -134,8 +155,15 @@ def update_settings(body):
         current["model"] = {"base_url": url, "name": str(model.get("name", ""))[:200]}
     if "schedule" in body:
         cfg = body["schedule"]
-        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", cfg.get("time", "")):
-            raise ValueError("时间格式应为 HH:MM")
+        if not isinstance(cfg, dict):
+            raise ValueError("调度设置格式不正确")
+        times = cfg["times"] if "times" in cfg else [cfg.get("time", "")]
+        if not isinstance(times, list) or not 1 <= len(times) <= 4:
+            raise ValueError("每天可以设置 1～4 个报告时间")
+        for value in times:
+            if not isinstance(value, str) or not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+                raise ValueError("时间格式应为 HH:MM")
+        times = sorted(set(times))
         for key in ("enabled", "ai", "push"):
             if not isinstance(cfg.get(key), bool):
                 raise ValueError("调度开关必须为布尔值")
@@ -145,7 +173,7 @@ def update_settings(body):
                 ZoneInfo(zone)
             except ZoneInfoNotFoundError:
                 raise ValueError("系统没有该时区数据库，请选择系统时区 local")
-        current["schedule"] = {k: cfg[k] for k in ("enabled", "time", "timezone", "ai", "push")}
+        current["schedule"] = {**{k: cfg[k] for k in ("enabled", "timezone", "ai", "push")}, "time": times[0], "times": times}
     if "watch" in body:
         cfg = body["watch"]
         if not isinstance(cfg, dict):
