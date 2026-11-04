@@ -8,6 +8,8 @@
 
 ## 从这里开始
 
+第一次接触 Agent？先看 [零基础认识潮汐](docs/零基础认识潮汐.md)：理解采集与 AI 的分工，并获取可复制给 TRAE、CodeBuddy、Qoder 等本地 AI 工具的安装提示词。
+
 1. 安装 **Python 3.11 或更新版本**：[Python 官网](https://www.python.org/downloads/)。Hermes 安装器会单独准备 Python 3.14。
 2. 下载 [最新发布包](https://github.com/Easton-Mei/tide-community/releases)，**解压到一个新文件夹**。
 3. macOS 双击 `启动潮汐.command`；Windows 双击 `启动潮汐.bat`；Linux 执行 `bash start.sh`。

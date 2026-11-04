@@ -20,9 +20,11 @@ def release_files():
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path,default=ROOT/'dist');parser.add_argument('--version',default=VERSION);args=parser.parse_args()
+    if not re.fullmatch(r'[0-9A-Za-z.\-]+', args.version):
+        raise SystemExit('Invalid release version')
     args.output.mkdir(parents=True,exist_ok=True)
-    archive=args.output/f'Tide-Community-{VERSION}.zip';prefix=f'Tide-Community-{VERSION}'
+    archive=args.output/f'Tide-Community-{args.version}.zip';prefix=f'Tide-Community-{args.version}'
     manifest={}
     with zipfile.ZipFile(archive.with_suffix('.zip.tmp'),'w',zipfile.ZIP_DEFLATED) as output:
         for path in release_files():
