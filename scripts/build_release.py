@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import zipfile
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='0.1.0'
+VERSION='0.1.1'
 DIRECTORIES=('app','agent','docs','examples','scripts','tests','.github')
 FILES=('README.md','LICENSE','THIRD_PARTY_NOTICES.md','CONTRIBUTING.md','SECURITY.md','AGENTS.md','.gitignore','tide.py','start.sh','启动潮汐.command','启动潮汐.bat','安装 Hermes.command','config/README.md')
 

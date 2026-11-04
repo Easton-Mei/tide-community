@@ -8,7 +8,7 @@
 
 ## 从这里开始
 
-第一次接触 Agent？先看 [零基础认识潮汐](docs/零基础认识潮汐.md)：理解采集与 AI 的分工，并获取可复制给 TRAE、CodeBuddy、Qoder 等本地 AI 工具的安装提示词。
+第一次接触 Agent？先看 [新手教程](docs/新手教程.md)：理解采集与 AI 的分工，并获取可复制给 TRAE、CodeBuddy、Qoder 等本地 AI 工具的安装提示词。
 
 1. 安装 **Python 3.11 或更新版本**：[Python 官网](https://www.python.org/downloads/)。Hermes 安装器会单独准备 Python 3.14。
 2. 下载 [最新发布包](https://github.com/Easton-Mei/tide-community/releases)，**解压到一个新文件夹**。
@@ -61,15 +61,14 @@ Tide/
 
 ## 教程
 
+- [新手教程](docs/新手教程.md)：简明原理、五步上手和 AI 辅助安装提示词。
+
 网页设置中可打开完整教程；也可离线双击 `docs/开始阅读.html`，不需要 Markdown 阅读器。
 
 - [快速开始](docs/快速开始.md)：从下载到第一份真实报告。
 - [常用操作](docs/常用操作.md)：添加公司、添加来源、定时运行和飞书推送。
 - [Agent 安装](docs/Agent安装.md)：Hermes 独立安装、模型配置和任务执行。
-- [视频教程脚本](docs/视频教程脚本.md)：适合录制“搭建第一个 Agent”。
 - [常见问题](docs/常见问题.md)：安装、网络、来源、时区、模型与数据备份。
-- [架构与开发](docs/架构与开发.md)：工具契约、数据流、验证与发布。
-- [验证记录](docs/验证记录.md)：本版已测内容和未验证边界。
 
 ## 给进阶用户
 

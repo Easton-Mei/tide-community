@@ -1,29 +1,83 @@
 #!/usr/bin/env python3
-"""Generate a dependency-free, offline-readable Chinese HTML guide."""
-from pathlib import Path
-import html
+"""Derive Markdown/export from the user-approved concise HTML; never expand it."""
+import argparse
 import re
-ROOT=Path(__file__).resolve().parents[1]
-names=['零基础认识潮汐','快速开始','常用操作','Agent安装','常见问题']
+from html.parser import HTMLParser
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]
 
-def inline(value):
-    text=html.escape(value)
-    text=re.sub(r'\*\*(.+?)\*\*',r'<strong>\1</strong>',text)
-    text=re.sub(r'\[([^\]]+)\]\((https://[^\s)]+)\)', r'<a href="\2" target="_blank" rel="noopener noreferrer">\1</a>', text)
-    return re.sub(r'`([^`]+)`',r'<code>\1</code>',text)
 
-sections=[]
-for i,name in enumerate(names):
-    content=[];code=[];in_code=False
-    for line in (ROOT/'docs'/f'{name}.md').read_text(encoding='utf-8').splitlines():
-        if line.startswith('```'):
-            if in_code:content.append('<pre>'+html.escape('\n'.join(code))+'</pre>');code=[]
-            in_code=not in_code;continue
-        if in_code:code.append(line);continue
-        if line.startswith('# '):content.append('<h1>'+inline(line[2:])+'</h1>')
-        elif line.startswith('## '):content.append('<h2>'+inline(line[3:])+'</h2>')
-        elif line:content.append('<p>'+inline(line)+'</p>')
-    sections.append(f'<section id="chapter-{i}">'+''.join(content)+'</section>')
-nav=''.join(f'<a href="#chapter-{i}">{name}</a>' for i,name in enumerate(names))
-page='<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>潮汐 · 新手使用教程</title><link rel="stylesheet" href="guide.css"></head><body><aside><b>≈ 潮汐 Tide</b><p>从第一次启动，到自己的 Agent。</p><nav>'+nav+'</nav><small>离线教程 · v0.1 · 零基础说明增补版</small></aside><main>'+''.join(sections)+'</main></body></html>'
-(ROOT/'docs'/'开始阅读.html').write_text(page,encoding='utf-8')
+class Markdown(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.active = False
+        self.pre = False
+        self.footer = False
+        self.links = []
+        self.parts = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'main':
+            self.active = True
+        if not self.active:
+            return
+        if tag == 'footer':
+            self.footer = True
+        if self.footer:
+            return
+        attrs = dict(attrs)
+        if tag in ('h1', 'h2', 'h3'):
+            self.parts.append('\n\n' + '#' * int(tag[1]) + ' ')
+        elif tag == 'p':
+            self.parts.append('\n\n')
+        elif tag == 'li':
+            self.parts.append('\n- ')
+        elif tag == 'pre':
+            self.pre = True
+            self.parts.append('\n\n```text\n')
+        elif tag == 'strong':
+            self.parts.append('**')
+        elif tag == 'code' and not self.pre:
+            self.parts.append('`')
+        elif tag == 'a':
+            self.links.append(attrs.get('href', ''))
+            self.parts.append('[')
+
+    def handle_endtag(self, tag):
+        if tag == 'main':
+            self.active = False
+        if not self.active or self.footer:
+            return
+        if tag == 'pre':
+            self.pre = False
+            self.parts.append('\n```\n\n')
+        elif tag in ('p', 'h1', 'h2', 'h3', 'ul', 'ol'):
+            self.parts.append('\n\n')
+        elif tag == 'strong':
+            self.parts.append('**')
+        elif tag == 'code' and not self.pre:
+            self.parts.append('`')
+        elif tag == 'a':
+            self.parts.append('](' + self.links.pop() + ')')
+
+    def handle_data(self, text):
+        if self.active and not self.footer:
+            self.parts.append(text)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--output', type=Path, help='Optional standalone HTML destination')
+    args = parser.parse_args()
+    html = (ROOT / 'docs/开始阅读.html').read_text(encoding='utf-8')
+    markdown = Markdown()
+    markdown.feed(html)
+    text = re.sub(r'\n{3,}', '\n\n', ''.join(markdown.parts)).strip() + '\n'
+    (ROOT / 'docs/新手教程.md').write_text(text, encoding='utf-8')
+    if args.output:
+        css = (ROOT / 'docs/guide.css').read_text(encoding='utf-8')
+        args.output.write_text(html.replace('<link rel="stylesheet" href="guide.css">', '<style>' + css + '</style>'), encoding='utf-8')
+
+
+if __name__ == '__main__':
+    main()
