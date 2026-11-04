@@ -12,5 +12,12 @@
     "timezone": "local",
     "ai": false,
     "push": false
+  },
+  "watch": {
+    "enabled": false,
+    "interval": 15,
+    "push": false,
+    "move_pct": 0,
+    "ai_review": false
   }
 }

@@ -23,6 +23,7 @@ def main():
     source.add_argument("--symbols", default="")
     discover = sub.add_parser("discover", help="查找网站订阅源，不保存")
     discover.add_argument("url")
+    sub.add_parser("watch", help="立即检查一次突发动态（默认不调用模型；开启 AI 复核后会产生模型用量）")
     sub.add_parser("status", help="查看配置和最近运行")
     agent = sub.add_parser("agent", help="交给独立 Hermes 执行")
     agent.add_argument("request")
@@ -41,6 +42,8 @@ def main():
         result = core.add_source(args.url, args.name, [s.strip().upper() for s in args.symbols.split(",") if s.strip()])
     elif args.command == "discover":
         result = core.discover(args.url)
+    elif args.command == "watch":
+        result = core.watch_once(progress=lambda message: print(message, file=sys.stderr))
     elif args.command == "agent":
         from app.agent_bridge import run
         result = run(args.request)

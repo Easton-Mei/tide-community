@@ -86,6 +86,36 @@ def scheduler():
             core.write_json(core.HOME / "data" / "scheduler_error.json", {"at": core.now(), "error": core.safe_error(exc)})
 
 
+def watcher():
+    """Monitoring loop. Runs only while this program is open and the computer is awake."""
+    while not STOP.wait(30):
+        try:
+            cfg = core.watch_settings()
+            if not cfg["enabled"] or TASK_LOCK.locked():
+                continue  # yield to manual jobs; keep the SEC request rate polite
+            state = core.read_json(core.HOME / "data" / "watch.json", {})
+            if not core.watch_due(state, cfg["interval"]):
+                continue
+            if not TASK_LOCK.acquire(blocking=False):
+                continue
+            try:
+                core.watch_once()
+            finally:
+                TASK_LOCK.release()
+        except Exception as exc:
+            core.write_json(core.HOME / "data" / "watch_error.json", {"at": core.now(), "error": core.safe_error(exc)})
+
+
+def next_watch():
+    cfg = core.watch_settings()
+    if not cfg["enabled"]:
+        return None
+    last = core.parse_time(core.read_json(core.HOME / "data" / "watch.json", {}).get("last_run"))
+    if not last:
+        return "即将开始"
+    return (last + timedelta(minutes=cfg["interval"])).isoformat()
+
+
 def update_settings(body):
     current = core.config("settings")
     for key in ("quotes", "agent_enabled"):
@@ -116,6 +146,21 @@ def update_settings(body):
             except ZoneInfoNotFoundError:
                 raise ValueError("系统没有该时区数据库，请选择系统时区 local")
         current["schedule"] = {k: cfg[k] for k in ("enabled", "time", "timezone", "ai", "push")}
+    if "watch" in body:
+        cfg = body["watch"]
+        if not isinstance(cfg, dict):
+            raise ValueError("突发提醒设置格式不正确")
+        cfg = {"ai_review": False, **cfg}
+        for key in ("enabled", "push", "ai_review"):
+            if not isinstance(cfg.get(key), bool):
+                raise ValueError("突发提醒开关必须为布尔值")
+        if cfg.get("interval") not in core.WATCH_INTERVALS:
+            raise ValueError("检查间隔只能选 5、10、15、30 或 60 分钟")
+        move = cfg.get("move_pct", 0)
+        if isinstance(move, bool) or not isinstance(move, (int, float)) or not 0 <= move <= 50:
+            raise ValueError("股价异动阈值应在 0～50 之间，0 表示关闭")
+        current["watch"] = {"enabled": cfg["enabled"], "interval": cfg["interval"], "push": cfg["push"], "move_pct": move,
+                            "ai_review": cfg["ai_review"]}
     if "hermes_executable" in body:
         current["hermes_executable"] = str(body["hermes_executable"])[:500]
     if "secrets" in body:
@@ -133,11 +178,14 @@ def snapshot():
             "reports": [{"id": p.stem} for p in reports],
             "configured": {k: bool(hidden.get(k)) for k in ("api_key", "feishu_webhook", "sec_user_agent")},
             "hermes_available": bool(agent_bridge.executable()),
-            "schedule_state": core.read_json(core.HOME / "data" / "schedule.json", {})}
+            "schedule_state": core.read_json(core.HOME / "data" / "schedule.json", {}),
+            "watch": core.watch_settings(), "next_watch": next_watch(), "alerts": core.recent_alerts(),
+            "watch_state": core.read_json(core.HOME / "data" / "watch.json", {}).get("last_result"),
+            "review_tokens_total": core.read_json(core.HOME / "data" / "watch.json", {}).get("review_tokens_total", 0)}
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "TideLocal/0.1"
+    server_version = "TideLocal/0.2"
 
     def log_message(self, fmt, *args):
         # Do not log URLs (model/webhook credentials can otherwise leak).
@@ -223,6 +271,8 @@ class Handler(BaseHTTPRequestHandler):
             return start_job("接入来源", lambda progress: core.add_source(str(body.get("url", "")), str(body.get("name", "")), body.get("symbols", [])))
         if path == "/api/watchlist/add":
             return start_job("添加公司", lambda progress: core.add_symbol(str(body.get("symbol", ""))))
+        if path == "/api/watch":
+            return start_job("检查突发", core.watch_once)
         if path == "/api/push":
             identifier = body.get("report_id", "")
             if not re.fullmatch(r"[0-9T\-a-z]+", identifier):
@@ -260,6 +310,7 @@ def serve(port=8765, browser=True):
     core.initialize()
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     threading.Thread(target=scheduler, daemon=True).start()
+    threading.Thread(target=watcher, daemon=True).start()
     url = f"http://127.0.0.1:{server.server_port}"
     print(f"潮汐已启动：{url}\n关闭本终端会停止定时运行。按 Ctrl+C 退出。", flush=True)
     if browser:
