@@ -1,3 +1,4 @@
+import os
 import json
 import tempfile
 import unittest
@@ -38,10 +39,23 @@ class FeishuAppTests(unittest.TestCase):
         first = core.create_feishu_env()
         self.assertTrue(first['created'])
         path = core.feishu_env_path()
-        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        self.assertTrue(core.is_private(path), (core._windows_sid(), core._windows_acl(path)) if os.name == 'nt' else path.stat().st_mode)
         path.write_text('FEISHU_APP_ID=cli_kept\n', encoding='utf-8')
         second = core.create_feishu_env()
         self.assertFalse(second['created'])
+        self.assertEqual(path.read_text(encoding='utf-8'), 'FEISHU_APP_ID=cli_kept\n')
+        self.assertTrue(core.is_private(path))
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows ACL only')
+    def test_windows_extra_readers_are_removed(self):
+        import subprocess
+        path = core.feishu_env_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('FEISHU_APP_ID=cli_kept\n', encoding='utf-8')
+        subprocess.run(['icacls', str(path), '/grant', '*S-1-5-32-545:R', '*S-1-1-0:R'], check=True, capture_output=True)
+        self.assertFalse(core.is_private(path))
+        core.create_feishu_env()
+        self.assertTrue(core.is_private(path), core._windows_acl(path))
         self.assertEqual(path.read_text(encoding='utf-8'), 'FEISHU_APP_ID=cli_kept\n')
 
     def test_empty_template_keeps_webhook_mode(self):

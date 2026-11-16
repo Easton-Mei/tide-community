@@ -1,3 +1,4 @@
+import os
 import json
 import tempfile
 import unittest
@@ -86,6 +87,8 @@ class CoreTests(unittest.TestCase):
 
     def test_secret_redaction_and_private_permissions(self):
         core.save_secrets({'api_key':'secret-example'})
+        target=core.HOME/'data'/'secrets.json'
+        self.assertTrue(core.is_private(target),(core._windows_sid(),core._windows_acl(target)) if os.name=='nt' else target.stat().st_mode)
         self.assertNotIn('secret-example',core.safe_error(ValueError('failed secret-example')))
         self.assertNotIn('secret-example',json.dumps(server.snapshot()))
 

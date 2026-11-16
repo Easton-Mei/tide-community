@@ -8,6 +8,7 @@ import os
 import re
 import socket
 import sqlite3
+import subprocess
 import tempfile
 import threading
 import time
@@ -24,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HOME = Path(os.environ.get("TIDE_HOME", ROOT)).resolve()
 LOCK = threading.RLock()
-VERSION = "0.2.2"
+VERSION = "0.2.3"
 
 
 def now():
@@ -95,6 +96,64 @@ def secrets():
     return read_json(HOME / "data" / "secrets.json", {})
 
 
+# Owner, SYSTEM and Administrators can always reach a user's files on Windows; nobody else should.
+# LA = built-in Administrator account, OW = OWNER RIGHTS, CO = CREATOR OWNER (SDDL aliases).
+WINDOWS_TRUSTED = {"SY", "BA", "OW", "CO", "S-1-5-18", "S-1-5-32-544", "S-1-3-4", "S-1-3-0"}
+SDDL_ALIASES = {"WD": "S-1-1-0", "AU": "S-1-5-11", "BU": "S-1-5-32-545", "BG": "S-1-5-32-546",
+                "IU": "S-1-5-4", "AN": "S-1-5-7", "NU": "S-1-5-2", "SU": "S-1-5-6", "RD": "S-1-5-32-555",
+                "PU": "S-1-5-32-547", "AC": "S-1-15-2-1"}
+
+
+def _windows_trusted(who, sid):
+    return who in WINDOWS_TRUSTED or who == sid or (who == "LA" and sid.endswith("-500"))
+
+
+def _windows_sid():
+    out = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True, check=True).stdout
+    sid = out.strip().split(",")[-1].strip().strip('"')
+    if not sid.startswith("S-1-"):
+        raise OSError("cannot read current user SID")
+    return sid
+
+
+def make_private(path):
+    """Owner-only access. POSIX: mode 0600. Windows: drop inherited ACEs and grant only the current user."""
+    path = Path(path)
+    if os.name != "nt":
+        path.chmod(0o600)
+        return True
+    sid = _windows_sid()
+    subprocess.run(["icacls", str(path), "/inheritance:r", "/grant:r", f"*{sid}:F"],
+                   capture_output=True, text=True, check=True)
+    for _, who in _windows_acl(path)[1]:
+        if not _windows_trusted(who, sid):
+            subprocess.run(["icacls", str(path), "/remove:g", "*" + SDDL_ALIASES.get(who, who)],
+                           capture_output=True, text=True, check=True)
+    return True
+
+
+def _windows_acl(path):
+    """Return (protected, [(ace_type, sid), ...]) for the file's DACL, read via icacls /save (SDDL)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        dump = Path(tmp) / "acl.txt"
+        subprocess.run(["icacls", str(path), "/save", str(dump)], capture_output=True, text=True, check=True)
+        sddl = dump.read_bytes().decode("utf-16-le", errors="replace").lstrip("\ufeff").splitlines()[1]
+    dacl = sddl.split("D:", 1)[1].split("S:", 1)[0]
+    flags = dacl.split("(", 1)[0]
+    aces = [tuple(ace.split(";")[i] for i in (0, 5)) for ace in re.findall(r"\(([^)]*)\)", dacl)]
+    return "P" in flags, aces
+
+
+def is_private(path):
+    """True when nobody but the owner can read the file."""
+    path = Path(path)
+    if os.name != "nt":
+        return path.stat().st_mode & 0o077 == 0
+    sid = _windows_sid()
+    protected, aces = _windows_acl(path)
+    allowed = [who for kind, who in aces if kind == "A"]
+    return protected and any(who in (sid, "LA") for who in allowed) and all(_windows_trusted(who, sid) for who in allowed)
+
 def save_secrets(values):
     with LOCK:
         current = secrets()
@@ -102,7 +161,7 @@ def save_secrets(values):
             if key in values:
                 current[key] = str(values[key]).strip()
         write_json(HOME / "data" / "secrets.json", current)
-        (HOME / "data" / "secrets.json").chmod(0o600)
+        make_private(HOME / "data" / "secrets.json")
 
 
 def clean(text, length=600):
@@ -504,7 +563,7 @@ def create_feishu_env():
     if created:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(FEISHU_ENV_TEMPLATE, encoding="utf-8")
-    path.chmod(0o600)
+    make_private(path)
     return {"path": str(path), "created": created,
             "fill": ["FEISHU_APP_ID：飞书开放平台应用的 App ID", "FEISHU_APP_SECRET：同一页的 App Secret",
                      "FEISHU_RECEIVE_ID：可选，机器人在多个群里时填目标群 chat_id"],
