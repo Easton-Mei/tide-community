@@ -7,4 +7,5 @@
 - `settings.json`：模型地址、报告时间和功能开关。
 
 日常请通过网页修改。密钥不在这里，而在本机 `data/secrets.json`。
+可选的飞书应用推送配置 `feishu.env` 会放在这个文件夹，运行 `python3 tide.py feishu-env` 生成，只保存在你自己的电脑上。
 运行中的配置不进入 Git，也不会进入官方发布包。

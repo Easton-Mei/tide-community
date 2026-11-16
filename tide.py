@@ -25,6 +25,8 @@ def main():
     discover.add_argument("url")
     sub.add_parser("watch", help="立即检查一次突发动态（默认不调用模型；开启 AI 复核后会产生模型用量）")
     sub.add_parser("status", help="查看配置和最近运行")
+    sub.add_parser("feishu-env", help="创建飞书应用推送配置文件 config/feishu.env（已存在则不覆盖）")
+    sub.add_parser("feishu-check", help="检查飞书应用推送：鉴权、机器人所在的群、发送目标（不发消息）")
     agent = sub.add_parser("agent", help="交给独立 Hermes 执行")
     agent.add_argument("request")
     args = parser.parse_args()
@@ -44,6 +46,10 @@ def main():
         result = core.discover(args.url)
     elif args.command == "watch":
         result = core.watch_once(progress=lambda message: print(message, file=sys.stderr))
+    elif args.command == "feishu-env":
+        result = core.create_feishu_env()
+    elif args.command == "feishu-check":
+        result = core.feishu_check()
     elif args.command == "agent":
         from app.agent_bridge import run
         result = run(args.request)

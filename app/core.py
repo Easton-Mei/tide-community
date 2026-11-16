@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HOME = Path(os.environ.get("TIDE_HOME", ROOT)).resolve()
 LOCK = threading.RLock()
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 
 
 def now():
@@ -159,7 +159,8 @@ def safe_error(exc):
     if isinstance(exc, urllib.error.URLError):
         return "连接失败，请检查网络、代理和证书"
     text = str(exc)
-    for value in secrets().values():
+    hidden = list(secrets().values()) + [feishu_env().get("FEISHU_APP_SECRET", "")]
+    for value in hidden:
         if value:
             text = text.replace(value, "[已隐藏]")
     return text[:350]
@@ -451,7 +452,140 @@ def feishu_webhook():
     return webhook
 
 
+FEISHU_ENV_TEMPLATE = """# 潮汐 · 飞书应用推送（可选）
+# 在飞书开放平台创建应用（智能体应用或企业自建应用都可以），把 App ID 和 App Secret 填在等号后面。
+# 填好后，把这个应用的机器人拉进你想接收简报的飞书群。
+# 这个文件只保存在你自己的电脑上，不要发给任何人，也不要贴进聊天框。
+FEISHU_APP_ID=
+FEISHU_APP_SECRET=
+# 可选：机器人在多个群里时，填要发去的群 chat_id（oc_ 开头）；也可以填你自己的 open_id（ou_ 开头）。
+FEISHU_RECEIVE_ID=
+# 可选：用 Lark 国际版时改成 lark
+FEISHU_DOMAIN=feishu
+"""
+FEISHU_RECEIVE_TYPES = ("chat_id", "open_id", "union_id", "user_id", "email")
+_FEISHU_TOKEN = {}
+
+
+def feishu_env_path():
+    return HOME / "config" / "feishu.env"
+
+
+def feishu_env():
+    """Read config/feishu.env (KEY=VALUE lines). Missing file means the app channel is off."""
+    values = {}
+    try:
+        lines = feishu_env_path().read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return values
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip().upper()] = value.split(" #", 1)[0].strip().strip('"').strip("'")
+    return values
+
+
+def feishu_app():
+    env = feishu_env()
+    if not (env.get("FEISHU_APP_ID") and env.get("FEISHU_APP_SECRET")):
+        return None
+    domain = env.get("FEISHU_DOMAIN", "feishu").lower()
+    return {"app_id": env["FEISHU_APP_ID"], "app_secret": env["FEISHU_APP_SECRET"],
+            "receive_id": env.get("FEISHU_RECEIVE_ID", ""), "receive_id_type": env.get("FEISHU_RECEIVE_ID_TYPE", "").lower(),
+            "base": "https://open.larksuite.com" if domain == "lark" else "https://open.feishu.cn"}
+
+
+def create_feishu_env():
+    """Create the template once; never overwrite what the user already filled in."""
+    path = feishu_env_path()
+    created = not path.exists()
+    if created:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(FEISHU_ENV_TEMPLATE, encoding="utf-8")
+    path.chmod(0o600)
+    return {"path": str(path), "created": created,
+            "fill": ["FEISHU_APP_ID：飞书开放平台应用的 App ID", "FEISHU_APP_SECRET：同一页的 App Secret",
+                     "FEISHU_RECEIVE_ID：可选，机器人在多个群里时填目标群 chat_id"],
+            "next": "填好后把应用机器人拉进飞书群，再运行 python3 tide.py feishu-check 检查"}
+
+
+def feishu_token(app):
+    cached = _FEISHU_TOKEN.get(app["app_id"])
+    if cached and cached[1] > time.time() + 60:
+        return cached[0]
+    result = get_json(app["base"] + "/open-apis/auth/v3/tenant_access_token/internal",
+                      headers={"Content-Type": "application/json; charset=utf-8"},
+                      payload=json.dumps({"app_id": app["app_id"], "app_secret": app["app_secret"]}).encode())
+    if result.get("code") != 0 or not result.get("tenant_access_token"):
+        raise ValueError("飞书应用鉴权失败，请检查 feishu.env 里的 App ID 和 App Secret")
+    _FEISHU_TOKEN[app["app_id"]] = (result["tenant_access_token"], time.time() + int(result.get("expire", 3600)))
+    return result["tenant_access_token"]
+
+
+def feishu_chats(app):
+    result = get_json(app["base"] + "/open-apis/im/v1/chats?page_size=50",
+                      headers={"Authorization": "Bearer " + feishu_token(app)})
+    if result.get("code") != 0:
+        raise ValueError("读取机器人所在的群失败，请确认应用已开通机器人能力和获取群信息权限")
+    return [{"name": c.get("name", ""), "chat_id": c.get("chat_id", "")} for c in (result.get("data") or {}).get("items", [])]
+
+
+def feishu_target(app):
+    receive_id = app["receive_id"]
+    if receive_id:
+        kind = app["receive_id_type"]
+        if not kind:
+            kind = "open_id" if receive_id.startswith("ou_") else "union_id" if receive_id.startswith("on_") \
+                else "email" if "@" in receive_id else "chat_id"
+        if kind not in FEISHU_RECEIVE_TYPES:
+            raise ValueError("FEISHU_RECEIVE_ID_TYPE 只能是 " + " / ".join(FEISHU_RECEIVE_TYPES))
+        return kind, receive_id
+    chats = feishu_chats(app)
+    if len(chats) == 1:
+        return "chat_id", chats[0]["chat_id"]
+    if not chats:
+        raise ValueError("飞书应用机器人还没在任何群里：把它拉进一个群，或在 feishu.env 填 FEISHU_RECEIVE_ID")
+    raise ValueError(f"机器人在 {len(chats)} 个群里，请运行 python3 tide.py feishu-check，把目标群的 chat_id 填进 FEISHU_RECEIVE_ID")
+
+
+def send_feishu_app(app, text):
+    kind, receive_id = feishu_target(app)
+    result = get_json(app["base"] + "/open-apis/im/v1/messages?receive_id_type=" + kind,
+                      headers={"Authorization": "Bearer " + feishu_token(app), "Content-Type": "application/json; charset=utf-8"},
+                      payload=json.dumps({"receive_id": receive_id, "msg_type": "text",
+                                          "content": json.dumps({"text": text}, ensure_ascii=False)}).encode())
+    if result.get("code") != 0:
+        raise ValueError("飞书应用未能发送消息，请确认应用已发布、机器人在目标群里且有发消息权限")
+
+
+def feishu_ready():
+    """Raise if no push channel is configured. feishu.env (app) wins over the webhook."""
+    if feishu_app():
+        return "app"
+    feishu_webhook()
+    return "webhook"
+
+
+def feishu_check():
+    app = feishu_app()
+    if not app:
+        return {"mode": "webhook" if secrets().get("feishu_webhook") else "none", "feishu_env": str(feishu_env_path()),
+                "hint": "feishu.env 里还没有 App ID 和 App Secret；运行 python3 tide.py feishu-env 创建模板"}
+    feishu_token(app)
+    result = {"mode": "app", "token": "ok", "chats": feishu_chats(app)}
+    try:
+        result["target"] = dict(zip(("receive_id_type", "receive_id"), feishu_target(app)))
+    except ValueError as exc:
+        result["target_error"] = str(exc)
+    return result
+
+
 def send_feishu(text):
+    app = feishu_app()
+    if app:
+        return send_feishu_app(app, text)
     webhook = feishu_webhook()
     result = get_json(webhook, headers={"Content-Type": "application/json"}, payload=json.dumps({
         "msg_type": "text", "content": {"text": text}}).encode())
@@ -460,7 +594,7 @@ def send_feishu(text):
 
 
 def deliver(report):
-    feishu_webhook()
+    feishu_ready()
     with db() as con:
         if con.execute("SELECT 1 FROM deliveries WHERE report_id=?", (report["id"],)).fetchone():
             return {"already_sent": True}
