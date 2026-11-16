@@ -117,12 +117,15 @@ def make_private(path):
 
 
 def _windows_acl(path):
-    literal = str(path).replace("'", "''")
-    script = (f"$a = Get-Acl -LiteralPath '{literal}'; 'PROTECTED=' + $a.AreAccessRulesProtected; "
-              "$a.Access | ForEach-Object { 'ACE=' + $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value + ':' + $_.AccessControlType }")
-    done = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-                          capture_output=True, text=True)
-    return done.stdout.split(), done.stderr.strip()
+    """Return (protected, [(ace_type, sid), ...]) for the file's DACL, read via icacls /save (SDDL)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        dump = Path(tmp) / "acl.txt"
+        subprocess.run(["icacls", str(path), "/save", str(dump)], capture_output=True, text=True, check=True)
+        sddl = dump.read_bytes().decode("utf-16-le", errors="replace").lstrip("\ufeff").splitlines()[1]
+    dacl = sddl.split("D:", 1)[1].split("S:", 1)[0]
+    flags = dacl.split("(", 1)[0]
+    aces = [tuple(ace.split(";")[i] for i in (0, 5)) for ace in re.findall(r"\(([^)]*)\)", dacl)]
+    return "P" in flags, aces
 
 
 def is_private(path):
@@ -130,9 +133,8 @@ def is_private(path):
     path = Path(path)
     if os.name != "nt":
         return path.stat().st_mode & 0o077 == 0
-    lines, _ = _windows_acl(path)
-    aces = {line[4:] for line in lines if line.startswith("ACE=")}
-    return "PROTECTED=True" in lines and aces == {f"{_windows_sid()}:Allow"}
+    protected, aces = _windows_acl(path)
+    return protected and aces == [("A", _windows_sid())]
 
 def save_secrets(values):
     with LOCK:
