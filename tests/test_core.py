@@ -86,6 +86,7 @@ class CoreTests(unittest.TestCase):
 
     def test_secret_redaction_and_private_permissions(self):
         core.save_secrets({'api_key':'secret-example'})
+        self.assertTrue(core.is_private(core.HOME/'data'/'secrets.json'))
         self.assertNotIn('secret-example',core.safe_error(ValueError('failed secret-example')))
         self.assertNotIn('secret-example',json.dumps(server.snapshot()))
 

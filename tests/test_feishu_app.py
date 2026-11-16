@@ -38,11 +38,12 @@ class FeishuAppTests(unittest.TestCase):
         first = core.create_feishu_env()
         self.assertTrue(first['created'])
         path = core.feishu_env_path()
-        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        self.assertTrue(core.is_private(path))
         path.write_text('FEISHU_APP_ID=cli_kept\n', encoding='utf-8')
         second = core.create_feishu_env()
         self.assertFalse(second['created'])
         self.assertEqual(path.read_text(encoding='utf-8'), 'FEISHU_APP_ID=cli_kept\n')
+        self.assertTrue(core.is_private(path))
 
     def test_empty_template_keeps_webhook_mode(self):
         core.create_feishu_env()

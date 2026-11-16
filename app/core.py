@@ -8,6 +8,7 @@ import os
 import re
 import socket
 import sqlite3
+import subprocess
 import tempfile
 import threading
 import time
@@ -24,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HOME = Path(os.environ.get("TIDE_HOME", ROOT)).resolve()
 LOCK = threading.RLock()
-VERSION = "0.2.2"
+VERSION = "0.2.3"
 
 
 def now():
@@ -95,6 +96,39 @@ def secrets():
     return read_json(HOME / "data" / "secrets.json", {})
 
 
+def _windows_sid():
+    out = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True, check=True).stdout
+    sid = out.strip().split(",")[-1].strip().strip('"')
+    if not sid.startswith("S-1-"):
+        raise OSError("cannot read current user SID")
+    return sid
+
+
+def make_private(path):
+    """Owner-only access. POSIX: mode 0600. Windows: drop inherited ACEs and grant only the current user."""
+    path = Path(path)
+    if os.name != "nt":
+        path.chmod(0o600)
+        return True
+    sid = _windows_sid()
+    subprocess.run(["icacls", str(path), "/inheritance:r", "/grant:r", f"*{sid}:F"],
+                   capture_output=True, text=True, check=True)
+    return True
+
+
+def is_private(path):
+    """True when nobody but the owner can read the file."""
+    path = Path(path)
+    if os.name != "nt":
+        return path.stat().st_mode & 0o077 == 0
+    literal = str(path).replace("'", "''")
+    script = (f"$a = Get-Acl -LiteralPath '{literal}'; if ($a.AreAccessRulesProtected) {{ 'PROTECTED' }}; "
+              "$a.Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }")
+    lines = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                           capture_output=True, text=True, check=True).stdout.split()
+    return "PROTECTED" in lines and set(lines) == {"PROTECTED", _windows_sid()}
+
+
 def save_secrets(values):
     with LOCK:
         current = secrets()
@@ -102,7 +136,7 @@ def save_secrets(values):
             if key in values:
                 current[key] = str(values[key]).strip()
         write_json(HOME / "data" / "secrets.json", current)
-        (HOME / "data" / "secrets.json").chmod(0o600)
+        make_private(HOME / "data" / "secrets.json")
 
 
 def clean(text, length=600):
@@ -504,7 +538,7 @@ def create_feishu_env():
     if created:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(FEISHU_ENV_TEMPLATE, encoding="utf-8")
-    path.chmod(0o600)
+    make_private(path)
     return {"path": str(path), "created": created,
             "fill": ["FEISHU_APP_ID：飞书开放平台应用的 App ID", "FEISHU_APP_SECRET：同一页的 App Secret",
                      "FEISHU_RECEIVE_ID：可选，机器人在多个群里时填目标群 chat_id"],
