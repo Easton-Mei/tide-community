@@ -1,3 +1,4 @@
+import os
 import json
 import tempfile
 import unittest
@@ -38,7 +39,7 @@ class FeishuAppTests(unittest.TestCase):
         first = core.create_feishu_env()
         self.assertTrue(first['created'])
         path = core.feishu_env_path()
-        self.assertTrue(core.is_private(path))
+        self.assertTrue(core.is_private(path), (core._windows_sid(), core._windows_acl(path)) if os.name == 'nt' else path.stat().st_mode)
         path.write_text('FEISHU_APP_ID=cli_kept\n', encoding='utf-8')
         second = core.create_feishu_env()
         self.assertFalse(second['created'])

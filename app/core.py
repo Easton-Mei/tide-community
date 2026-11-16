@@ -116,18 +116,23 @@ def make_private(path):
     return True
 
 
+def _windows_acl(path):
+    literal = str(path).replace("'", "''")
+    script = (f"$a = Get-Acl -LiteralPath '{literal}'; 'PROTECTED=' + $a.AreAccessRulesProtected; "
+              "$a.Access | ForEach-Object { 'ACE=' + $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value + ':' + $_.AccessControlType }")
+    done = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                          capture_output=True, text=True)
+    return done.stdout.split(), done.stderr.strip()
+
+
 def is_private(path):
     """True when nobody but the owner can read the file."""
     path = Path(path)
     if os.name != "nt":
         return path.stat().st_mode & 0o077 == 0
-    literal = str(path).replace("'", "''")
-    script = (f"$a = Get-Acl -LiteralPath '{literal}'; if ($a.AreAccessRulesProtected) {{ 'PROTECTED' }}; "
-              "$a.Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }")
-    lines = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-                           capture_output=True, text=True, check=True).stdout.split()
-    return "PROTECTED" in lines and set(lines) == {"PROTECTED", _windows_sid()}
-
+    lines, _ = _windows_acl(path)
+    aces = {line[4:] for line in lines if line.startswith("ACE=")}
+    return "PROTECTED=True" in lines and aces == {f"{_windows_sid()}:Allow"}
 
 def save_secrets(values):
     with LOCK:
