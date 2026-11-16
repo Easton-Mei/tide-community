@@ -96,6 +96,18 @@ def secrets():
     return read_json(HOME / "data" / "secrets.json", {})
 
 
+# Owner, SYSTEM and Administrators can always reach a user's files on Windows; nobody else should.
+# LA = built-in Administrator account, OW = OWNER RIGHTS, CO = CREATOR OWNER (SDDL aliases).
+WINDOWS_TRUSTED = {"SY", "BA", "OW", "CO", "S-1-5-18", "S-1-5-32-544", "S-1-3-4", "S-1-3-0"}
+SDDL_ALIASES = {"WD": "S-1-1-0", "AU": "S-1-5-11", "BU": "S-1-5-32-545", "BG": "S-1-5-32-546",
+                "IU": "S-1-5-4", "AN": "S-1-5-7", "NU": "S-1-5-2", "SU": "S-1-5-6", "RD": "S-1-5-32-555",
+                "PU": "S-1-5-32-547", "AC": "S-1-15-2-1"}
+
+
+def _windows_trusted(who, sid):
+    return who in WINDOWS_TRUSTED or who == sid or (who == "LA" and sid.endswith("-500"))
+
+
 def _windows_sid():
     out = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True, check=True).stdout
     sid = out.strip().split(",")[-1].strip().strip('"')
@@ -113,6 +125,10 @@ def make_private(path):
     sid = _windows_sid()
     subprocess.run(["icacls", str(path), "/inheritance:r", "/grant:r", f"*{sid}:F"],
                    capture_output=True, text=True, check=True)
+    for _, who in _windows_acl(path)[1]:
+        if not _windows_trusted(who, sid):
+            subprocess.run(["icacls", str(path), "/remove:g", "*" + SDDL_ALIASES.get(who, who)],
+                           capture_output=True, text=True, check=True)
     return True
 
 
@@ -133,8 +149,10 @@ def is_private(path):
     path = Path(path)
     if os.name != "nt":
         return path.stat().st_mode & 0o077 == 0
+    sid = _windows_sid()
     protected, aces = _windows_acl(path)
-    return protected and aces == [("A", _windows_sid())]
+    allowed = [who for kind, who in aces if kind == "A"]
+    return protected and any(who in (sid, "LA") for who in allowed) and all(_windows_trusted(who, sid) for who in allowed)
 
 def save_secrets(values):
     with LOCK:
