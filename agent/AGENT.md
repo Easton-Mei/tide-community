@@ -12,6 +12,8 @@
 - `tide.py report`：真实采集并生成规则报告。
 - `tide.py report --ai`：调用已配置模型整理，会产生额外 API 用量；仅用户要求时使用。
 - `tide.py report --demo`：离线示例，不是真实新闻，不写入真实历史库。
+- `tide.py feishu-env`：用户要接飞书应用推送时运行，生成 `config/feishu.env` 模板，把路径和要填的字段告诉用户，由用户自己填写；不要索要、读取或代填 App Secret。
+- `tide.py feishu-check`：检查飞书应用鉴权和机器人所在的群，不发消息。
 - `tide.py watch`：立即检查一次突发动态；只提醒新出现的近期消息，默认不调用模型；开启 AI 复核后会产生模型用量。若用户开启了推送，会发送飞书。
 
 ## 新增来源流程

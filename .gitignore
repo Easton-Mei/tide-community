@@ -9,6 +9,7 @@ data/
 logs/
 reports/
 config/*.json
+config/*.env
 !config/README.md
 dist/
 .playwright/
